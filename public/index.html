@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>YouTube Watch Together</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://www.youtube.com/iframe_api"></script>
+</head>
+<body>
+
+  <!-- LOBBY EKRANI -->
+  <div id="lobby-screen" class="screen active">
+    <div class="lobby-card">
+      <h2>YouTube Watch Together</h2>
+      <div class="my-code-box">
+        <span>Senin Kodun:</span>
+        <strong id="my-code">------</strong>
+      </div>
+      <button id="btn-start-modal" class="yt-red-btn">Arkadaşına Bağlan</button>
+      
+      <div class="requests-container">
+        <h3>Gelenler Listesi</h3>
+        <ul id="requests-list">
+          <li class="empty">Henüz gelen bağlantı isteği yok.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- KOD GİRİŞ MODALI -->
+  <div id="code-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Arkadaşının Kodunu Gir</h3>
+      <input type="text" id="target-code-input" maxlength="6" placeholder="123456">
+      <div class="modal-actions">
+        <button id="btn-send-code" class="yt-btn-primary">İstek Gönder</button>
+        <button id="btn-close-modal" class="yt-btn-secondary">İptal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANA UYGULAMA EKRANI -->
+  <div id="app-screen" class="screen hidden">
+    <header class="yt-header">
+      <div class="logo-area">
+        <span class="yt-icon">▶</span>
+        <span class="yt-title">YouTube</span>
+      </div>
+      
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Ara">
+        <button id="search-btn">🔍</button>
+      </div>
+
+      <div class="room-status">
+        <span class="status-dot"></span> 2 Kişi Bağlı
+      </div>
+    </header>
+
+    <div class="main-layout" id="main-scroll-layout">
+      <!-- VİDEO LİSTE SAYFASI -->
+      <div id="video-grid-page" class="view">
+        <h2 id="grid-title">Önerilenler</h2>
+        <div id="video-grid" class="grid"></div>
+      </div>
+
+      <!-- VİDEO OYNATICI SAYFASI -->
+      <div id="player-page" class="view hidden">
+        <button id="btn-back-home" class="yt-btn-secondary">← Ana Sayfaya Dön</button>
+        <div class="player-container">
+          <div id="player"></div>
+          <!-- 📌 YouTube'un kendi butonlarına tıklanmasını tamamen engelleyen şeffaf koruma kalkanı -->
+          <div class="transparent-shield"></div>
+          
+          <div class="player-overlay">
+            <button id="custom-play-pause-btn" class="custom-ctrl-btn">▶ Oynat / Durdur</button>
+          </div>
+        </div>
+        <h3 id="playing-title">Video Başlığı</h3>
+      </div>
+    </div>
+  </div>
+
+  <!-- SANAL İKİNCİ KULLANICI İMLECİ -->
+  <div id="peer-cursor" class="peer-cursor hidden">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="#ff0000">
+      <path d="M3 3l7 18 3-7 7-3L3 3z"/>
+    </svg>
+    <span class="cursor-label">Arkadaşın</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
