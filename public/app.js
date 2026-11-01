@@ -250,31 +250,47 @@ socket.on('sync-play-video', (data) => {
     isControlledByServer = true;
     const btnIcon = document.getElementById('play-btn-icon');
 
-    createPlayer(data.videoId, () => {
-        hideLoading();
-        showUIControls();
+    socket.on('sync-play-video', (data) => {
+    const btnIcon = document.getElementById('play-btn-icon');
 
-        if (data.state === 'PLAY') {
-            const localTime = player.getCurrentTime();
-            
-            if (Math.abs(localTime - data.time) > 15.0) {
-                player.seekTo(data.time, true);
-            }
-            player.playVideo();
-            isPlayingState = true;
-            if (btnIcon) btnIcon.textContent = "❚❚";
-            
-            setTimeout(() => { isControlledByServer = false; }, 2000);
-        } else if (data.state === 'PAUSE') {
-            player.pauseVideo();
-            player.seekTo(data.time, true);
-            isPlayingState = false;
-            if (btnIcon) btnIcon.textContent = "▶";
-            
-            setTimeout(() => { isControlledByServer = false; }, 2000);
-        }
-    });
+    // Eğer oynatıcı henüz yoksa veya SEÇİLEN VİDEO DEĞİŞTİYSE (yeni video açılıyorsa)
+    if (!player || !isPlayerReady || activeVideoId !== data.videoId) {
+        activeVideoId = data.videoId;
+        createPlayer(data.videoId, () => {
+            hideLoading();
+            showUIControls();
+            applySyncState(data, btnIcon);
+        });
+    } else {
+        // Zaten aynı video oynuyor, sadece durdur/başlat ve zaman senkronizasyonu yap (Başa sarmaz!)
+        applySyncState(data, btnIcon);
+    }
 });
+
+// Ortak senkronizasyon uygulayıcı fonksiyon
+function applySyncState(data, btnIcon) {
+    hideLoading();
+    showUIControls();
+
+    const localTime = player.getCurrentTime();
+    
+    // Eğer süre farkı 3 saniyeden fazlaysa zamanı eşitle
+    if (Math.abs(localTime - data.time) > 3.0) {
+        player.seekTo(data.time, true);
+    }
+
+    if (data.state === 'PLAY') {
+        player.playVideo();
+        isPlayingState = true;
+        if (btnIcon) btnIcon.textContent = "❚❚";
+    } else if (data.state === 'PAUSE') {
+        player.pauseVideo();
+        player.seekTo(data.time, true); // Durdurulduğunda tam o anı sabitle
+        isPlayingState = false;
+        if (btnIcon) btnIcon.textContent = "▶";
+    }
+}
+    });
 
 window.addEventListener('mousemove', (e) => {
     showUIControls();
