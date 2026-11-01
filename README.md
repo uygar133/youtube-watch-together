@@ -23,7 +23,8 @@ sonra 2. bir terminal açıp şu komudu çalıştırın
 ngrok http 3000
 
 ```
-Son komudu girdikten sonra size gelen linki arkadaşınızla beraber web siteyi açmanız gerekir. Web site açıldıktan sonra "Senin kodun" bölümünü arkadaşın "Arkadaşına Bağlan" yazısının altına yazıp istek gönder butonuna basmalıdır. arkadaşın butona bastıktan sonra sende "Gelenler Listesi" yazısının altındaki kabul et butonuna basman gerekir. Bastıktan sonra biraz beklersen hem sana hemde arkadaşına videolar gelir burdan sonra istediğiniz videoyu seçip arkadaşınızla izleyebilirsiniz
+Son komudu girdikten sonra size gelen linki arkadaşınızla beraber web siteyi açmanız gerekir. Web site açıldıktan sonra "Senin kodun" bölümünü arkadaşın "Arkadaşına Bağlan" yazısının altına yazıp istek gönder butonuna basmalıdır. arkadaşın butona bastıktan sonra sende "Gelenler Listesi" yazısının altındaki kabul et butonuna basman gerekir. Bastıktan sonra biraz beklersen hem sana hemde arkadaşına videolar gelir burdan sonra istediğiniz videoyu seçip arkadaşınızla izleyebilirsiniz. Not: videoyu space ile durdurmayın arkadaşının videosu ile senin videon farklı yerlerde oynuyorsa videoyu durdurup başlatın.
+
 Node.js ve ngrok un indirme linkleri aşağıda verilmiştir.
 
 
