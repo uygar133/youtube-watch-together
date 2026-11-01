@@ -2,15 +2,16 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const yts = require('yt-search');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static('public'));
+// Güvenli dosya yolu
+app.use(express.static(path.join(__dirname, 'public')));
 
 const users = {}; 
-const rooms = {};
 
 async function getRandomSuggestedVideos() {
     const randomKeywords = ['trending music', 'popular gameplay', 'lofi hip hop', 'tech review', 'nature 4k'];
@@ -99,6 +100,7 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Sunucu http://localhost:${PORT} üzerinde çalışıyor.`);
+// YEREL GÜVENLİK: Sadece localhost (127.0.0.1) üzerinden dinler, dış ağlara kapalıdır.
+server.listen(PORT, '127.0.0.1', () => {
+    console.log(`Sunucu http://127.0.0.1:${PORT} üzerinde çalışıyor.`);
 });

@@ -7,8 +7,8 @@ let activeVideoId = null;
 let isPlayerReady = false;
 let isPlayingState = false;
 let uiTimeout = null;
+let loadingTimeout = null;
 
-// Fare hareketine göre özel UI'ı gösteren ve 3s sonra gizleyen mekanizma
 function showUIControls() {
     const overlay = document.getElementById('custom-controls-overlay');
     if (!overlay) return;
@@ -29,11 +29,20 @@ window.addEventListener('keydown', (e) => {
     }
 });
 
-function showLoading(msg = "Lütfen bekleyin...") {
+function showLoading(msg = "Lütfen bekleyin...", timeoutMs = 10000) {
     document.getElementById('loading-text').textContent = msg;
     document.getElementById('loading-overlay').style.display = 'flex';
+
+    if (loadingTimeout) clearTimeout(loadingTimeout);
+    
+    // Sonsuz yüklemede takılmayı önlemek için zaman aşımı
+    loadingTimeout = setTimeout(() => {
+        hideLoading();
+    }, timeoutMs);
 }
+
 function hideLoading() {
+    if (loadingTimeout) clearTimeout(loadingTimeout);
     document.getElementById('loading-overlay').style.display = 'none';
 }
 
@@ -76,6 +85,10 @@ function createPlayer(videoId, callback) {
             'onReady': (event) => {
                 isPlayerReady = true;
                 if (callback) callback();
+            },
+            'onError': (event) => {
+                hideLoading();
+                alert("Bu video oynatılamıyor (Gömme izni yok veya engellenmiş). Lütfen başka bir video seçin.");
             }
         }
     });
@@ -120,20 +133,38 @@ function sendConnectionRequest() {
         alert("Lütfen bir kod girin!");
         return;
     }
-    showLoading("İstek gönderiliyor...");
+    showLoading("Bağlantı isteği gönderildi, karşı tarafın kabul etmesi bekleniyor...", 15000);
     socket.emit('send-request', { targetCode });
 }
 
+// XSS KORUMASI: innerHTML yerine güvenli DOM oluşturma (createElement, textContent)
 socket.on('incoming-request', (data) => {
     hideLoading();
     const container = document.getElementById('incoming-requests');
     if (!container) return;
-    container.innerHTML = `
-        <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
-            <p><strong>${data.fromCode}</strong> seninle video izlemek istiyor!</p>
-            <button onclick="acceptRequest('${data.fromId}')" style="background: #4CAF50;">Kabul Et</button>
-        </div>
-    `;
+    
+    container.innerHTML = ''; // Önceki istekleri temizle
+
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.gap = '10px';
+    wrapper.style.marginTop = '10px';
+
+    const p = document.createElement('p');
+    const strong = document.createElement('strong');
+    strong.textContent = data.fromCode;
+    p.appendChild(strong);
+    p.appendChild(document.createTextNode(' seninle video izlemek istiyor!'));
+
+    const btn = document.createElement('button');
+    btn.textContent = 'Kabul Et';
+    btn.style.background = '#4CAF50';
+    btn.onclick = () => acceptRequest(data.fromId);
+
+    wrapper.appendChild(p);
+    wrapper.appendChild(btn);
+    container.appendChild(wrapper);
 });
 
 function acceptRequest(fromId) {
@@ -169,23 +200,36 @@ socket.on('search-results', (data) => {
     renderVideoList(data.videos);
 });
 
+// XSS KORUMASI: Güvenli video liste oluşturucu
 function renderVideoList(videos) {
     const container = document.getElementById('video-list');
     if (!container) return;
 
+    container.innerHTML = '';
+
     if (!videos || videos.length === 0) {
-        container.innerHTML = '<p style="color: #888; text-align: center;">Video bulunamadı.</p>';
+        const p = document.createElement('p');
+        p.style.color = '#888';
+        p.style.textAlign = 'center';
+        p.textContent = 'Video bulunamadı.';
+        container.appendChild(p);
         return;
     }
 
-    container.innerHTML = '';
     videos.forEach(video => {
         const card = document.createElement('div');
         card.className = 'video-card';
-        card.innerHTML = `
-            <img src="${video.thumbnail}" alt="${video.title}">
-            <p>${video.title}</p>
-        `;
+
+        const img = document.createElement('img');
+        img.src = video.thumbnail;
+        img.alt = video.title;
+
+        const p = document.createElement('p');
+        p.textContent = video.title;
+
+        card.appendChild(img);
+        card.appendChild(p);
+
         card.onclick = () => {
             showLoading("Video açılıyor...");
             activeVideoId = video.id;
@@ -196,6 +240,7 @@ function renderVideoList(videos) {
                 time: 0
             });
         };
+
         container.appendChild(card);
     });
 }
@@ -207,12 +252,11 @@ socket.on('sync-play-video', (data) => {
 
     createPlayer(data.videoId, () => {
         hideLoading();
-        showUIControls(); // Video açıldığında UI'ı göster
+        showUIControls();
 
         if (data.state === 'PLAY') {
             const localTime = player.getCurrentTime();
             
-            // Tolerans süresi 15 saniyeye düşürüldü
             if (Math.abs(localTime - data.time) > 15.0) {
                 player.seekTo(data.time, true);
             }
@@ -232,7 +276,6 @@ socket.on('sync-play-video', (data) => {
     });
 });
 
-// Kendi fare hareketin
 window.addEventListener('mousemove', (e) => {
     showUIControls();
 
@@ -242,7 +285,6 @@ window.addEventListener('mousemove', (e) => {
     socket.emit('mouse-move', { roomId: currentRoomId, xRatio, yRatio });
 });
 
-// Arkadaşının fare hareketi
 socket.on('remote-mouse-move', (data) => {
     showUIControls();
 
@@ -260,14 +302,18 @@ let isRemoteScrolling = false;
 
 listContainer.addEventListener('scroll', () => {
     if (!currentRoomId || isRemoteScrolling) return;
-    const scrollTopRatio = listContainer.scrollTop / (listContainer.scrollHeight - listContainer.clientHeight);
+    const maxScroll = listContainer.scrollHeight - listContainer.clientHeight;
+    if (maxScroll <= 0) return; // Sıfıra bölme hatası (NaN) engellendi
+    const scrollTopRatio = listContainer.scrollTop / maxScroll;
     socket.emit('sync-scroll', { roomId: currentRoomId, scrollTopRatio });
 });
 
 socket.on('remote-scroll', (data) => {
     if (!listContainer) return;
+    const maxScroll = listContainer.scrollHeight - listContainer.clientHeight;
+    if (maxScroll <= 0) return;
     isRemoteScrolling = true;
-    listContainer.scrollTop = data.scrollTopRatio * (listContainer.scrollHeight - listContainer.clientHeight);
+    listContainer.scrollTop = data.scrollTopRatio * maxScroll;
     setTimeout(() => { isRemoteScrolling = false; }, 100);
 });
 
