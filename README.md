@@ -1,33 +1,38 @@
- # youtube-watch-together
+# youtube-watch-together
 
-Bu uygulama sizin ve arkadaşınızın birlikte aynı anda video izlemenize yardımcı olmak için geçiştirilmiş bir araçtır. Aracı kullanmak için önce Node.js aracını ve Ngrok aracını kurmanız gerekmektedir. Aracın kaynak kodlarını indirip kaynak kodları içinde terminal açın ve terminalde şu 2 komudu çalıştırın
+Bu uygulama, sizin ve arkadaşınızın aynı anda birlikte video izlemesine yardımcı olmak için hazırlanmış basit bir araçtır.
 
-```bash 
+## Gereksinimler
 
-npm install
+- [Node.js](https://nodejs.org/en/download): Sadece platformunuzu seçin, diğer ayarlar doğrudur.
+- [ngrok](https://ngrok.com/download): Adresi açıp platformunuzu seçerek indirebilirsiniz.
 
-```
+## Kurulum
 
-ve
-
-```bash 
-
-node server.js
-
-```
-
-sonra 2. bir terminal açıp şu komudu çalıştırın
+1. Projenin kaynak kodlarını indirin ve klasörü açın.
+2. Klasör içinde bir terminal açıp şu komutu çalıştırın:
 
 ```bash
-
-ngrok http 3000
-
+npm install
 ```
-Son komudu girdikten sonra size gelen linki arkadaşınızla beraber web siteyi açmanız gerekir. Web site açıldıktan sonra "Senin kodun" bölümünü arkadaşın "Arkadaşına Bağlan" yazısının altına yazıp istek gönder butonuna basmalıdır. arkadaşın butona bastıktan sonra sende "Gelenler Listesi" yazısının altındaki kabul et butonuna basman gerekir. Bastıktan sonra biraz beklersen hem sana hemde arkadaşına videolar gelir burdan sonra istediğiniz videoyu seçip arkadaşınızla izleyebilirsiniz. Not: videoyu space ile durdurmayın arkadaşının videosu ile senin videon farklı yerlerde oynuyorsa videoyu durdurup başlatın.
 
-Node.js ve ngrok un indirme linkleri aşağıda verilmiştir.
+3. Ardından sunucuyu başlatın:
 
+```bash
+node server.js
+```
 
-Node.js indirme adresi https://nodejs.org/en/download burda sadece platformunuzu değiştirin onun dışındaki ayarlar doğrudur
+4. İkinci bir terminal açıp şu komutu çalıştırın:
 
-Ngrok indirme adresi https://ngrok.com/download/ adresi girdikten sonra platformunuzu seçip indirebilirsiniz
+```bash
+ngrok http 3000
+```
+
+## Kullanım
+
+1. Son komuttan sonra ngrok'un verdiği bağlantıyı arkadaşınızla birlikte tarayıcıda açın.
+2. Arkadaşınız, sizin "Senin Kodun" bölümündeki kodunuzu "Arkadaşına Bağlan" başlığının altına yazıp "İstek Gönder" butonuna basmalıdır.
+3. Arkadaşınız butona bastıktan sonra sizde "Gelen İstekler" başlığının altında "Kabul Et" butonu görünür, ona basın.
+4. Biraz bekleyince hem size hem arkadaşınıza videolar gelir. Bundan sonra istediğiniz videoyu seçip birlikte izleyebilirsiniz.
+
+> **Not:** Videoyu boşluk (Space) tuşuyla durdurmayın. Sizin videonuzla arkadaşınızın videosu farklı yerlerde oynuyorsa videoyu durdurup yeniden başlatın.
