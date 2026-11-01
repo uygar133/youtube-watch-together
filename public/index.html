@@ -1,95 +1,151 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8">
-  <title>YouTube Watch Together</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://www.youtube.com/iframe_api"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Watch Together</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .card {
+            background: #1e1e1e;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .hidden-until-ready {
+            display: none;
+        }
+        #player-wrapper {
+            display: none;
+            position: relative;
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        #youtube-player {
+            width: 100%;
+            height: 100%;
+        }
+        #video-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+            margin-top: 15px;
+        }
+        .video-card {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .video-card:hover {
+            transform: scale(1.03);
+            background: #333333;
+        }
+        .video-card img {
+            width: 100%;
+            aspect-ratio: 16/9;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        .video-card p {
+            font-size: 13px;
+            margin: 6px 0 0 0;
+            color: #ddd;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .code-display {
+            font-size: 20px;
+            font-weight: bold;
+            color: #4CAF50;
+            letter-spacing: 2px;
+        }
+        button {
+            padding: 8px 15px;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            background: #2a2a2a;
+            color: white;
+        }
+    </style>
 </head>
 <body>
 
-  <!-- LOBBY EKRANI -->
-  <div id="lobby-screen" class="screen active">
-    <div class="lobby-card">
-      <h2>YouTube Watch Together</h2>
-      <div class="my-code-box">
-        <span>Senin Kodun:</span>
-        <strong id="my-code">------</strong>
-      </div>
-      <button id="btn-start-modal" class="yt-red-btn">Arkadaşına Bağlan</button>
-      
-      <div class="requests-container">
-        <h3>Gelenler Listesi</h3>
-        <ul id="requests-list">
-          <li class="empty">Henüz gelen bağlantı isteği yok.</li>
-        </ul>
-      </div>
-    </div>
-  </div>
+    <div class="container">
+        <h1>YouTube Watch Together</h1>
 
-  <!-- KOD GİRİŞ MODALI -->
-  <div id="code-modal" class="modal hidden">
-    <div class="modal-content">
-      <h3>Arkadaşının Kodunu Gir</h3>
-      <input type="text" id="target-code-input" maxlength="6" placeholder="123456">
-      <div class="modal-actions">
-        <button id="btn-send-code" class="yt-btn-primary">İstek Gönder</button>
-        <button id="btn-close-modal" class="yt-btn-secondary">İptal</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ANA UYGULAMA EKRANI -->
-  <div id="app-screen" class="screen hidden">
-    <header class="yt-header">
-      <div class="logo-area">
-        <span class="yt-icon">▶</span>
-        <span class="yt-title">YouTube</span>
-      </div>
-      
-      <div class="search-box">
-        <input type="text" id="search-input" placeholder="Ara">
-        <button id="search-btn">🔍</button>
-      </div>
-
-      <div class="room-status">
-        <span class="status-dot"></span> 2 Kişi Bağlı
-      </div>
-    </header>
-
-    <div class="main-layout" id="main-scroll-layout">
-      <!-- VİDEO LİSTE SAYFASI -->
-      <div id="video-grid-page" class="view">
-        <h2 id="grid-title">Önerilenler</h2>
-        <div id="video-grid" class="grid"></div>
-      </div>
-
-      <!-- VİDEO OYNATICI SAYFASI -->
-      <div id="player-page" class="view hidden">
-        <button id="btn-back-home" class="yt-btn-secondary">← Ana Sayfaya Dön</button>
-        <div class="player-container">
-          <div id="player"></div>
-          <!-- 📌 YouTube'un kendi butonlarına tıklanmasını tamamen engelleyen şeffaf koruma kalkanı -->
-          <div class="transparent-shield"></div>
-          
-          <div class="player-overlay">
-            <button id="custom-play-pause-btn" class="custom-ctrl-btn">▶ Oynat / Durdur</button>
-          </div>
+        <div class="card">
+            <p>Senin Kodun: <span id="myCode" class="code-display">------</span></p>
         </div>
-        <h3 id="playing-title">Video Başlığı</h3>
-      </div>
+
+        <div class="card" id="connection-section">
+            <h3>Arkadaşına Bağlan</h3>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <input type="text" id="targetCodeInput" placeholder="Arkadaşın kodu (örn: 123456)" style="flex: 1;">
+                <button onclick="sendConnectionRequest()" style="background: #4CAF50;">İstek Gönder</button>
+            </div>
+        </div>
+
+        <div class="card" id="requests-section">
+            <h3>Gelenler Listesi</h3>
+            <div id="incoming-requests">
+                <p>- Henüz gelen bağlantı isteği yok.</p>
+            </div>
+        </div>
+
+        <div class="card hidden-until-ready" id="room-section">
+            <h3>İzleme Alanı</h3>
+            
+            <div id="player-wrapper">
+                <div id="youtube-player"></div>
+            </div>
+
+            <div style="margin: 15px 0; display: flex; gap: 10px;">
+                <input type="text" id="searchInput" placeholder="YouTube'da başka bir şey ara..." style="flex: 1;">
+                <button onclick="searchVideos()" style="background: #2196F3;">Ara</button>
+            </div>
+            
+            <h4>Videolar</h4>
+            <div id="video-list"></div>
+        </div>
     </div>
-  </div>
 
-  <!-- SANAL İKİNCİ KULLANICI İMLECİ -->
-  <div id="peer-cursor" class="peer-cursor hidden">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="#ff0000">
-      <path d="M3 3l7 18 3-7 7-3L3 3z"/>
-    </svg>
-    <span class="cursor-label">Arkadaşın</span>
-  </div>
-
-  <script src="app.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

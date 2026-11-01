@@ -2,34 +2,46 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const yts = require('yt-search'); // YouTube'dan anlık arama için
+const yts = require('yt-search');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Public klasörünü statik olarak dışarı açıyoruz
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ana sayfa isteği geldiğinde public klasöründeki index.html dosyasını gönderir
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Kullanıcıları ve odaları takip etmek için sözlükler
-const users = {}; // socket.id -> code
-const rooms = {}; // roomId -> [socketId1, socketId2]
+const users = {}; 
+const rooms = {}; 
 
-// 6 haneli rastgele kod üretici
 function generateCode() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Socket.io bağlantı ve olayları
+async function searchYouTube(query) {
+    try {
+        console.log(`---> YouTube'dan canlı çekiliyor: "${query}"`);
+        const r = await yts(query);
+        
+        const videos = (r.videos || []).slice(0, 20).map(v => ({
+            id: v.videoId || '',
+            title: v.title || 'İsimsiz Video',
+            thumbnail: v.thumbnail || ''
+        })).filter(v => v.id);
+
+        return videos;
+    } catch (error) {
+        console.error('*** YouTube arama hatası:', error.message);
+        return [];
+    }
+}
+
 io.on('connection', (socket) => {
     console.log('Bir kullanıcı bağlandı:', socket.id);
 
-    // 1. Kullanıcıya özel 6 haneli kod üret ve gönder
     let code = generateCode();
     while (Object.values(users).includes(code)) {
         code = generateCode();
@@ -37,7 +49,6 @@ io.on('connection', (socket) => {
     users[socket.id] = code;
     socket.emit('init-user', { code: code });
 
-    // 2. Başka bir kullanıcıya bağlantı isteği gönderme
     socket.on('send-request', ({ targetCode }) => {
         const targetSocketId = Object.keys(users).find(id => users[id] === targetCode);
         if (targetSocketId) {
@@ -48,8 +59,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // 3. Bağlantı isteğini kabul etme
-    socket.on('accept-request', ({ fromId }) => {
+    socket.on('accept-request', async ({ fromId }) => {
         const roomId = 'room_' + socket.id + '_' + fromId;
         socket.join(roomId);
         
@@ -60,46 +70,26 @@ io.on('connection', (socket) => {
 
         rooms[roomId] = [socket.id, fromId];
 
-        // İki tarafa da odanın hazır olduğunu bildir
-        io.to(roomId).emit('room-ready', { roomId, videos: [] });
+        const liveHomepageVideos = await searchYouTube('trending music');
+        io.to(roomId).emit('room-ready', { roomId, videos: liveHomepageVideos });
     });
 
-    // 4. YouTube'dan Anlık Arama Yapma
     socket.on('search-query', async ({ roomId, query }) => {
-        try {
-            const r = await yts(query);
-            const videos = r.videos.slice(0, 15).map(v => ({
-                id: v.videoId,
-                title: v.title,
-                thumbnail: v.thumbnail
-            }));
-
-            socket.emit('search-results', { query, videos });
-        } catch (error) {
-            console.error('Arama hatası:', error);
-            socket.emit('error-msg', 'Arama yapılırken bir hata oluştu.');
-        }
+        const videos = await searchYouTube(query);
+        io.to(roomId).emit('search-results', { query, videos });
     });
 
-    // 5. Oynat / Durdur / Senkronizasyon Olayları
-    socket.on('player-state-change', (data) => {
-        const executeAt = Date.now() + 1000; // 1 saniye gecikme payı
-        socket.to(data.roomId).emit('peer-player-state-change', {
-            state: data.state,
-            time: data.time,
-            executeAt: executeAt
+    // Zaman bilgisine (time) 2.5 saniye ofset ekleyerek paketleyen kısım
+    socket.on('play-video', (data) => {
+        const targetTime = (parseFloat(data.time) || 0) + 2.5; 
+
+        io.to(data.roomId).emit('sync-play-video', {
+            videoId: data.videoId,
+            time: targetTime, 
+            state: data.state
         });
     });
 
-    socket.on('video-control', (data) => {
-        socket.to(data.roomId).emit('peer-video-control', data);
-    });
-
-    socket.on('mouse-move', (data) => {
-        socket.to(data.roomId).emit('peer-mouse-move', data);
-    });
-
-    // 6. Bağlantı kopması
     socket.on('disconnect', () => {
         console.log('Kullanıcı ayrıldı:', socket.id);
         delete users[socket.id];

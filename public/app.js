@@ -1,306 +1,183 @@
 const socket = io();
 
 let currentRoomId = null;
-let myCode = null;
-let isLoadingMore = false;
 let player = null;
-let isRemoteAction = false;
+let isControlledByServer = false;
+let activeVideoId = null;
+let isPlayerReady = false;
 
-// DOM Elemanları
-const lobbyScreen = document.getElementById('lobby-screen');
-const appScreen = document.getElementById('app-screen');
-const myCodeEl = document.getElementById('my-code');
-const requestsList = document.getElementById('requests-list');
+function onYouTubeIframeAPIReady() {
+    console.log("YouTube Iframe API Hazır.");
+}
 
-const codeModal = document.getElementById('code-modal');
-const btnStartModal = document.getElementById('btn-start-modal');
-const btnCloseModal = document.getElementById('btn-close-modal');
-const btnSendCode = document.getElementById('btn-send-code');
-const targetCodeInput = document.getElementById('target-code-input');
+function createPlayer(videoId, callback) {
+    const wrapper = document.getElementById('player-wrapper');
+    if (wrapper) wrapper.style.display = 'block';
 
-const peerCursor = document.getElementById('peer-cursor');
-const videoGrid = document.getElementById('video-grid');
-const mainScrollLayout = document.getElementById('main-scroll-layout');
-const playerPage = document.getElementById('player-page');
-const videoGridPage = document.getElementById('video-grid-page');
-const playingTitle = document.getElementById('playing-title');
-const btnBackHome = document.getElementById('btn-back-home');
-const gridTitle = document.getElementById('grid-title');
-const customPlayPauseBtn = document.getElementById('custom-play-pause-btn');
+    if (player && typeof player.loadVideoById === 'function') {
+        isPlayerReady = false;
+        player.loadVideoById(videoId);
+        setTimeout(() => {
+            isPlayerReady = true;
+            if (callback) callback();
+        }, 1000);
+        return;
+    }
 
-const searchInput = document.getElementById('search-input');
-const searchBtn = document.getElementById('search-btn');
+    player = new YT.Player('youtube-player', {
+        height: '100%',
+        width: '100%',
+        videoId: videoId,
+        playerVars: {
+            'autoplay': 0,
+            'controls': 1,
+            'enablejsapi': 1,
+            'origin': window.location.origin
+        },
+        events: {
+            'onReady': (event) => {
+                isPlayerReady = true;
+                if (callback) callback();
+            },
+            'onStateChange': onPlayerStateChange
+        }
+    });
+}
+
+function onPlayerStateChange(event) {
+    if (isControlledByServer) return;
+    if (!activeVideoId || !isPlayerReady) return;
+
+    if (event.data === YT.PlayerState.PLAYING) {
+        player.pauseVideo(); 
+
+        socket.emit('play-video', {
+            roomId: currentRoomId,
+            videoId: activeVideoId,
+            state: 'PLAY',
+            time: player.getCurrentTime()
+        });
+    } 
+    else if (event.data === YT.PlayerState.PAUSED) {
+        socket.emit('play-video', {
+            roomId: currentRoomId,
+            videoId: activeVideoId,
+            state: 'PAUSE',
+            time: player.getCurrentTime()
+        });
+    }
+}
 
 socket.on('init-user', (data) => {
-  myCode = data.code;
-  myCodeEl.textContent = myCode;
+    const codeEl = document.getElementById('myCode');
+    if (codeEl) codeEl.textContent = data.code;
 });
 
-btnStartModal.onclick = () => codeModal.classList.remove('hidden');
-btnCloseModal.onclick = () => codeModal.classList.add('hidden');
-
-btnSendCode.onclick = () => {
-  const code = targetCodeInput.value.trim();
-  if (code.length === 6) {
-    socket.emit('send-request', { targetCode: code });
-    codeModal.classList.add('hidden');
-    targetCodeInput.value = '';
-    alert('İstek gönderildi!');
-  } else {
-    alert('6 haneli kod giriniz.');
-  }
-};
-
-socket.on('incoming-request', ({ fromCode, fromId }) => {
-  requestsList.innerHTML = `
-    <li>
-      <span>Kod: <strong>${fromCode}</strong></span>
-      <button class="yt-btn-primary" style="padding:4px 10px;" onclick="acceptConnection('${fromId}')">Kabul Et</button>
-    </li>
-  `;
-});
-
-window.acceptConnection = (fromId) => {
-  socket.emit('accept-request', { fromId });
-};
-
-socket.on('room-ready', ({ roomId, videos }) => {
-  currentRoomId = roomId;
-  lobbyScreen.classList.remove('active');
-  lobbyScreen.classList.add('hidden');
-  appScreen.classList.remove('hidden');
-  appScreen.classList.add('active');
-
-  videoGrid.innerHTML = '';
-  renderVideos(videos);
-});
-
-// Arama
-function performSearch() {
-  const query = searchInput.value.trim();
-  if (query && currentRoomId) {
-    socket.emit('search-query', { roomId: currentRoomId, query });
-  }
+function sendConnectionRequest() {
+    const targetCode = document.getElementById('targetCodeInput').value.trim();
+    if (!targetCode) {
+        alert("Lütfen bir kod girin!");
+        return;
+    }
+    socket.emit('send-request', { targetCode });
+    alert("Bağlantı isteği gönderildi...");
 }
-searchBtn.onclick = performSearch;
-searchInput.onkeyup = (e) => { if (e.key === 'Enter') performSearch(); };
 
-socket.on('search-results', ({ query, videos }) => {
-  gridTitle.textContent = `"${query}" Sonuçları`;
-  videoGrid.innerHTML = '';
-  playerPage.classList.add('hidden');
-  videoGridPage.classList.remove('hidden');
-  renderVideos(videos);
-});
+socket.on('incoming-request', (data) => {
+    const requestsContainer = document.getElementById('incoming-requests');
+    if (!requestsContainer) return;
 
-function renderVideos(videos) {
-  videos.forEach(video => {
-    const card = document.createElement('div');
-    card.className = 'video-card';
-    card.innerHTML = `
-      <img src="${video.thumbnail}" alt="${video.title}">
-      <div class="video-info">
-        <div class="video-title">${video.title}</div>
-      </div>
+    requestsContainer.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
+            <p><strong>${data.fromCode}</strong> kodlu kullanıcıdan oda isteği!</p>
+            <button onclick="acceptRequest('${data.fromId}')" style="background: #4CAF50;">Kabul Et</button>
+        </div>
     `;
-    card.onclick = () => selectVideo(video, true);
-    videoGrid.appendChild(card);
-  });
-  isLoadingMore = false;
-}
-
-// Sonsuz Kaydırma
-mainScrollLayout.addEventListener('scroll', () => {
-  if (videoGridPage.classList.contains('hidden')) return;
-  const bottom = mainScrollLayout.scrollHeight - mainScrollLayout.scrollTop - mainScrollLayout.clientHeight;
-  if (bottom < 300 && !isLoadingMore && currentRoomId) {
-    isLoadingMore = true;
-    socket.emit('load-more-videos', { roomId: currentRoomId });
-  }
 });
 
-socket.on('append-more-videos', ({ videos }) => {
-  renderVideos(videos);
-});
-
-// YouTube API
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player('player', {
-    height: '100%',
-    width: '100%',
-    playerVars: {
-      'controls': 0,
-      'modestbranding': 1,
-      'rel': 0,
-      'iv_load_policy': 3
-    },
-    events: {}
-  });
+function acceptRequest(fromId) {
+    socket.emit('accept-request', { fromId });
 }
 
-// 📌 ÖZEL BUTON: 1 Saniye (1000ms) Ortak Saat Kilidi ile Play/Pause/Seek
-if (customPlayPauseBtn) {
-  customPlayPauseBtn.onclick = () => {
-    if (isRemoteAction || !player || typeof player.getPlayerState !== 'function') return;
+socket.on('room-ready', (data) => {
+    currentRoomId = data.roomId;
 
-    const state = player.getPlayerState();
-    const time = player.getCurrentTime();
+    document.getElementById('connection-section').style.display = 'none';
+    document.getElementById('requests-section').style.display = 'none';
+    document.getElementById('room-section').style.display = 'block';
 
-    isRemoteAction = true;
-    const newState = (state === YT.PlayerState.PLAYING) ? 'PAUSE' : 'PLAY';
+    renderVideoList(data.videos);
+});
 
-    if (newState === 'PAUSE') {
-      player.pauseVideo();
-      customPlayPauseBtn.textContent = '▶ Oynat';
-    } else {
-      player.playVideo();
-      customPlayPauseBtn.textContent = '⏸ Durdur';
+socket.on('search-results', (data) => {
+    renderVideoList(data.videos);
+});
+
+function renderVideoList(videos) {
+    const container = document.getElementById('video-list');
+    if (!container) return;
+
+    if (!videos || videos.length === 0) {
+        container.innerHTML = '<p style="color: #888; grid-column: span 4; text-align: center;">Video bulunamadı.</p>';
+        return;
     }
 
-    // 1000ms (1 saniye) gelecekteki ortak zaman damgasıyla gönder
-    socket.emit('player-state-change', { 
-      roomId: currentRoomId, 
-      state: newState, 
-      time: time 
+    container.innerHTML = '';
+    videos.forEach(video => {
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.innerHTML = `
+            <img src="${video.thumbnail}" alt="${video.title}">
+            <p>${video.title}</p>
+        `;
+        card.onclick = () => {
+            activeVideoId = video.id;
+            socket.emit('play-video', {
+                roomId: currentRoomId,
+                videoId: video.id,
+                state: 'PLAY',
+                time: 0
+            });
+        };
+        container.appendChild(card);
     });
-
-    setTimeout(() => { isRemoteAction = false; }, 800);
-  };
 }
 
-// Karşı Taraftan Gelen Aksiyonu Uygula (1 Saniye Bekleme Payı ile)
-socket.on('peer-player-state-change', ({ state, time, executeAt }) => {
-  if (!player || typeof player.seekTo !== 'function') return;
-
-  isRemoteAction = true;
-
-  const executeAction = () => {
-    if (Math.abs(player.getCurrentTime() - time) > 0.4) {
-      player.seekTo(time, true);
+function searchVideos() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (query && currentRoomId) {
+        socket.emit('search-query', { roomId: currentRoomId, query: query });
     }
-
-    if (state === 'PLAY') {
-      player.playVideo();
-      customPlayPauseBtn.textContent = '⏸ Durdur';
-    } else if (state === 'PAUSE') {
-      player.pauseVideo();
-      customPlayPauseBtn.textContent = '▶ Oynat';
-    }
-
-    setTimeout(() => { isRemoteAction = false; }, 800);
-  };
-
-  const now = Date.now();
-  const delay = executeAt - now;
-
-  if (delay <= 0) {
-    executeAction();
-  } else {
-    setTimeout(executeAction, delay);
-  }
-});
-
-// İlk Başlangıç (3 Saniye Ortak Saat Kilidi)
-socket.on('execute-synchronized-start', ({ startTimestamp }) => {
-  if (!player || typeof player.playVideo !== 'function') return;
-
-  isRemoteAction = true;
-  player.seekTo(0, true);
-  player.pauseVideo();
-  customPlayPauseBtn.textContent = '▶ Oynat';
-
-  const checkTimeAndPlay = () => {
-    const now = Date.now();
-    const remainingTime = startTimestamp - now;
-
-    if (remainingTime <= 0) {
-      player.playVideo();
-      customPlayPauseBtn.textContent = '⏸ Durdur';
-      setTimeout(() => { isRemoteAction = false; }, 1000);
-    } else {
-      setTimeout(checkTimeAndPlay, Math.min(remainingTime, 10));
-    }
-  };
-
-  checkTimeAndPlay();
-});
-
-function selectVideo(video, emitEvent = true) {
-  videoGridPage.classList.add('hidden');
-  playerPage.classList.remove('hidden');
-  playingTitle.textContent = video.title;
-  customPlayPauseBtn.textContent = '▶ Oynat';
-
-  if (player && player.cueVideoById) {
-    player.cueVideoById(video.id);
-    setTimeout(() => {
-      if (currentRoomId) {
-        socket.emit('video-ready-to-play', { roomId: currentRoomId });
-      }
-    }, 1000);
-  }
-
-  if (emitEvent && currentRoomId) {
-    socket.emit('video-control', { roomId: currentRoomId, action: 'SELECT', videoId: video.id, title: video.title });
-  }
 }
 
-btnBackHome.onclick = () => goHome(true);
+// 30 Saniye Tolerans Eşiği ile Senkronizasyon
+socket.on('sync-play-video', (data) => {
+    activeVideoId = data.videoId;
+    isControlledByServer = true;
 
-function goHome(emitEvent = true) {
-  playerPage.classList.add('hidden');
-  videoGridPage.classList.remove('hidden');
-  if (player && typeof player.stopVideo === 'function') player.stopVideo();
+    createPlayer(data.videoId, () => {
+        if (data.state === 'PLAY') {
+            const localTime = player.getCurrentTime();
+            const timeDifference = Math.abs(localTime - data.time);
 
-  if (emitEvent && currentRoomId) {
-    socket.emit('video-control', { roomId: currentRoomId, action: 'HOME' });
-  }
-}
+            // Fark 30 saniyeden büyükse zamanı eşitle (seek), küçükse akışa bırak
+            if (timeDifference > 30.0) {
+                player.seekTo(data.time, true);
+            }
+            
+            player.playVideo();
 
-socket.on('peer-video-control', (data) => {
-  if (data.action === 'SELECT') {
-    videoGridPage.classList.add('hidden');
-    playerPage.classList.remove('hidden');
-    playingTitle.textContent = data.title;
-    customPlayPauseBtn.textContent = '▶ Oynat';
-    if (player && player.cueVideoById) {
-      player.cueVideoById(data.videoId);
-      setTimeout(() => {
-        if (currentRoomId) {
-          socket.emit('video-ready-to-play', { roomId: currentRoomId });
+            setTimeout(() => { 
+                isControlledByServer = false; 
+            }, 2000);
+        } 
+        else if (data.state === 'PAUSE') {
+            player.pauseVideo();
+            player.seekTo(data.time, true);
+
+            setTimeout(() => { 
+                isControlledByServer = false; 
+            }, 2000);
         }
-      }, 1000);
-    }
-  } else if (data.action === 'HOME') {
-    goHome(false);
-  }
+    });
 });
-
-// İmleç Takibi ve Pencere Dışı (Mouseleave) Kontrolü
-window.addEventListener('mousemove', (e) => {
-  if (!currentRoomId) return;
-  const xRatio = e.clientX / window.innerWidth;
-  const yRatio = e.clientY / window.innerHeight;
-  const scrollY = mainScrollLayout.scrollTop;
-
-  socket.emit('mouse-move', { roomId: currentRoomId, xRatio, yRatio, scrollY, visible: true });
-});
-
-document.addEventListener('mouseleave', () => {
-  if (!currentRoomId) return;
-  socket.emit('mouse-move', { roomId: currentRoomId, visible: false });
-});
-
-socket.on('peer-mouse-move', (data) => {
-  if (!data.visible) {
-    peerCursor.classList.add('hidden');
-    return;
-  }
-
-  peerCursor.classList.remove('hidden');
-  const targetX = data.xRatio * window.innerWidth;
-  const targetY = (data.yRatio * window.innerHeight) + data.scrollY;
-  peerCursor.style.transform = `translate(${targetX}px, ${targetY}px)`;
-});
-
-socket.on('error-msg', (msg) => alert(msg));
